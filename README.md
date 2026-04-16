@@ -1,6 +1,6 @@
 # CloudUploader JavaScript SDK
 
-[![npm version](https://badge.fury.io/js/%40clouduploader-js%2Fclouduploader.svg)](https://www.npmjs.com/package/@clouduploader-js/clouduploader)
+[![npm version](https://badge.fury.io/js/%40clouduploader%2Fclouduploader-js.svg)](https://www.npmjs.com/package/@clouduploader/clouduploader-js)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A highly-concurrent, low-latency JavaScript/TypeScript SDK for the **CloudUploader** platform. 
@@ -27,13 +27,13 @@ This SDK natively interfaces with CloudUploader endpoints (`/api/upload/iaas/cre
 Install the package from npm:
 
 ```bash
-npm install @clouduploader-js/clouduploader
+npm install @clouduploader/clouduploader-js
 ```
 
 Or with yarn:
 
 ```bash
-yarn add @clouduploader-js/clouduploader
+yarn add @clouduploader/clouduploader-js
 ```
 
 ---
@@ -43,7 +43,7 @@ yarn add @clouduploader-js/clouduploader
 Initialize the `CloudUploader` client in your application:
 
 ```typescript
-import { CloudUploader } from '@clouduploader-js/clouduploader';
+import { CloudUploader } from '@clouduploader/clouduploader-js';
 
 const uploader = new CloudUploader('ck_live_xxx', {
     baseUrl: 'http://localhost:8080',   // Root backend (loaded from config.json by default)
@@ -63,7 +63,7 @@ const uploader = new CloudUploader('ck_live_xxx', {
 The SDK supports both configuration file and runtime options:
 
 ```typescript
-import { CloudUploader } from '@clouduploader-js/clouduploader';
+import { CloudUploader } from '@clouduploader/clouduploader-js';
 
 const uploader = new CloudUploader('ck_live_xxx', {
     baseUrl: 'https://api.clouduploader.com',  // Override config.json
@@ -352,7 +352,7 @@ import {
     DownloadError,
     AuthenticationError,
     UploadFailedError 
-} from '@clouduploader-js/clouduploader';
+} from '@clouduploader/clouduploader-js';
 
 try {
     await uploader.uploadFile('mission_critical.pdf');
@@ -496,7 +496,7 @@ For issues, questions, or feature requests, please open an issue on the [GitHub 
 ### Resources
 
 - [GitHub Repository](https://github.com/CloudUploader/clouduploader-js)
-- [npm Package](https://www.npmjs.com/package/@clouduploader-js/clouduploader)
+- [npm Package](https://www.npmjs.com/package/@clouduploader/clouduploader-js)
 - [HTTP Client](./src/httpClient.ts)
 - [Multipart Upload](./src/multipart.ts)
 

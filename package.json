@@ -1,6 +1,6 @@
 {
-  "name": "@clouduploader-js/clouduploader",
-  "version": "1.0.0",
+  "name": "@clouduploader/clouduploader-js",
+  "version": "1.0.2",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
