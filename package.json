@@ -1,6 +1,6 @@
 {
   "name": "@clouduploader/clouduploader-js",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
@@ -10,6 +10,9 @@
   "author": "CloudUploader",
   "license": "MIT",
   "description": "JavaScript SDK for CloudUploader - A comprehensive cloud file upload solution",
+  "publishConfig": {
+    "access": "public"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/CloudUploader/clouduploader-js.git"
