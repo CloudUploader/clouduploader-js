@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as os from 'os';
 import { HttpClient } from './httpClient';
 import { UploadInitError, UploadFailedError } from './exceptions';
 import { MultipartUploadEngine, ProgressCallback } from './multipart';
@@ -10,17 +11,20 @@ export class UploadOrchestrator {
     public maxWorkers: number;
     private chunkOverride?: number;
     private defaultStorage: string;
+    private networkMbps?: number;
 
     constructor(
         http: HttpClient,
         maxWorkers = 5,
         chunkOverride?: number,
-        defaultStorage = 'r2'
+        defaultStorage = 'r2',
+        networkMbps?: number
     ) {
         this.http = http;
         this.maxWorkers = maxWorkers;
         this.chunkOverride = chunkOverride;
         this.defaultStorage = defaultStorage;
+        this.networkMbps = networkMbps;
     }
 
     public async upload(
@@ -72,21 +76,31 @@ export class UploadOrchestrator {
         return this.http.postJson('/api/upload/iaas/abort', { upload_id: uploadId });
     }
 
+    /** Request fresh presigned URLs for specific failed parts without restarting the upload. */
+    public async retry(uploadId: string, failedParts: number[]): Promise<any> {
+        return this.http.postJson('/api/upload/iaas/retry', { upload_id: uploadId, failed_parts: failedParts });
+    }
+
     private async safeAbort(uploadId: string): Promise<void> {
         try {
             await this.abort(uploadId);
-        } catch (err) {
+        } catch {
             // ignore
         }
     }
 
     private async initUpload(filename: string, fileSize: number, storage: string): Promise<any> {
+        const payload: any = {
+            filename,
+            size: fileSize,
+            storage,
+            cpu_threads: os.cpus().length,
+        };
+        if (this.networkMbps !== undefined) {
+            payload.network_mbps = this.networkMbps;
+        }
         try {
-            const resp = await this.http.postJson('/api/upload/iaas/create', {
-                filename,
-                size: fileSize,
-                storage
-            });
+            const resp = await this.http.postJson('/api/upload/iaas/create', payload);
             if (!resp.success) {
                 throw new UploadInitError(resp.message || 'Init rejected', resp.error);
             }
@@ -106,13 +120,9 @@ export class UploadOrchestrator {
     ): Promise<void> {
         const url = initResp.presigned_url;
         const contentType = guessContentType(filePath);
-        
         await this.http.putBinary(url, () => fs.createReadStream(filePath), contentType, fileSize);
-
         if (progressCallback) {
-            try {
-                progressCallback(fileSize, fileSize);
-            } catch (err) {}
+            try { progressCallback(fileSize, fileSize); } catch {}
         }
     }
 
@@ -122,22 +132,56 @@ export class UploadOrchestrator {
         initResp: any,
         progressCallback?: ProgressCallback
     ): Promise<any[]> {
+        const uploadId: string = initResp.upload_id;
         const chunkSize = this.chunkOverride || initResp.chunk_size;
         const presignedUrls = initResp.presigned_urls;
         const parallelism = Math.min(this.maxWorkers, initResp.part_parallelism || this.maxWorkers);
+        const contentType = guessContentType(filePath);
 
         const engine = new MultipartUploadEngine(
-            this.http,
-            filePath,
-            fileSize,
-            chunkSize,
-            presignedUrls,
-            parallelism,
-            progressCallback,
-            guessContentType(filePath)
+            this.http, filePath, fileSize, chunkSize, presignedUrls, parallelism, progressCallback, contentType
         );
 
-        return engine.execute();
+        let result = await engine.execute();
+
+        // Retry failed parts once via /retry (gets fresh presigned URLs, no new multipart init)
+        if (result.failedParts.length > 0) {
+            let retryResp: any;
+            try {
+                retryResp = await this.retry(uploadId, result.failedParts);
+            } catch (err: any) {
+                throw new UploadFailedError(
+                    `${result.failedParts.length} parts failed and /retry call failed: ${err.message}`,
+                    err.error_code, err.status_code, result.failedParts, uploadId
+                );
+            }
+            if (!retryResp.success) {
+                throw new UploadFailedError(
+                    `Retry init rejected: ${retryResp.message || retryResp.error}`,
+                    retryResp.error, undefined, result.failedParts, uploadId
+                );
+            }
+
+            const retryResult = await engine.uploadRetryParts(retryResp.retry_urls);
+            if (retryResult.failedParts.length > 0) {
+                throw new UploadFailedError(
+                    `${retryResult.failedParts.length} parts still failed after retry`,
+                    undefined, undefined, retryResult.failedParts, uploadId
+                );
+            }
+
+            // Merge: successful from first pass (excluding retried) + retried
+            const retriedNums = new Set(retryResult.completed.map(p => p.part_number));
+            result = {
+                completed: [
+                    ...result.completed.filter(p => !retriedNums.has(p.part_number)),
+                    ...retryResult.completed,
+                ].sort((a, b) => a.part_number - b.part_number),
+                failedParts: [],
+            };
+        }
+
+        return result.completed;
     }
 
     private async completeUpload(uploadId: string, mode: string, parts?: any[]): Promise<any> {
@@ -145,7 +189,6 @@ export class UploadOrchestrator {
         if (mode === 'multipart' && parts) {
             payload.parts = parts;
         }
-
         try {
             const resp = await this.http.postJson('/api/upload/iaas/complete', payload);
             if (!resp.success) {
